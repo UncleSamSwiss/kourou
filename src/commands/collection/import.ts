@@ -50,6 +50,11 @@ export default class CollectionImport extends Kommand {
         index,
         collection)
     }
+    else {
+      if (! await this.sdk.collection.exists(index, collection)) {
+        await this.sdk.collection.create(index, collection)
+      }
+    }
 
     await restoreCollectionData(
       this.sdk,

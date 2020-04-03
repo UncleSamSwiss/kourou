@@ -7,8 +7,8 @@ class Query extends Kommand {
   public static description = 'Executes an API query';
 
   public static examples = [
-    'kourou query document:get --arg index=iot --arg collection=sensors --arg _id=sigfox-42',
-    'kourou query collection:create --arg index=iot --arg collection=sensors --body \'{dynamic: "strict"}\'',
+    'kourou query document:get -i iot -c sensors --arg _id=sigfox-42',
+    'kourou query collection:create -i iot -c sensors --body \'{dynamic: "strict"}\'',
     'kourou query admin:loadMappings < mappings.json',
     'echo \'{name: "Aschen"}\' | kourou query document:create --arg index=iot --arg collection=sensors'
   ]
@@ -26,6 +26,14 @@ class Query extends Kommand {
     }),
     editor: flags.boolean({
       description: 'Open an editor (EDITOR env variable) to edit the request before sending'
+    }),
+    index: flags.string({
+      char: 'i',
+      description: 'Index argument (shortcut for --arg index=<name>)'
+    }),
+    collection: flags.string({
+      char: 'c',
+      description: 'Collection name (shortcut for --arg collection=<name>)'
     }),
     ...kuzzleFlags,
   };
@@ -66,6 +74,14 @@ class Query extends Kommand {
       action,
       ...requestArgs,
       body: this.parseJs(body),
+    }
+
+    if (userFlags.index) {
+      request.index = userFlags.index
+    }
+
+    if (userFlags.collection) {
+      request.collection = userFlags.collection
     }
 
     // content from user editor

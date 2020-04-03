@@ -1,6 +1,8 @@
 import { flags } from '@oclif/command'
 import { Kommand } from '../../common'
 import { kuzzleFlags, KuzzleSDK } from '../../support/kuzzle'
+import cli from 'cli-ux'
+import * as _ from 'lodash'
 
 export default class DocumentGet extends Kommand {
   static description = 'Deletes one or multiple documents'
@@ -15,8 +17,12 @@ export default class DocumentGet extends Kommand {
     query: flags.string({
       description: 'Query to delete matching documents (JS or JSON format)'
     }),
-    editor: flags.boolean({
-      description: 'Open an editor (EDITOR env variable) to edit the request before sending'
+    'batch-size': flags.string({
+      description: 'Maximum batch size (see limits.documentsWriteCount config)',
+      default: '200'
+    }),
+    'dry-run': flags.boolean({
+      description: 'Only print the number of matching documents and their IDs'
     }),
     ...kuzzleFlags
   }
@@ -35,36 +41,74 @@ export default class DocumentGet extends Kommand {
     this.sdk = new KuzzleSDK(userFlags)
     await this.sdk.init(this.log)
 
-    let request: any = {
-      controller: 'document',
-      index: args.index,
-      collection: args.collection,
+    const singleDelete = Boolean(args.id)
+
+    const index = args.index
+    const collection = args.collection
+
+    // try to read stdin
+    const stdin = await this.fromStdin()
+
+    let rawQuery: any = stdin ? stdin : userFlags.query
+    let query = this.parseJs(rawQuery)
+
+    if (_.isEmpty(query) && !args.id) {
+      throw new Error('You must either provide an ID as an argument ar the --query flag or a query from STDIN')
     }
 
-    if (userFlags.query) {
-      request.action = 'deleteByQuery'
+    if (!singleDelete && !query.query) {
+      query = { query }
     }
-    else if (args.id) {
-      request.action = 'delete'
-      request.id = args.id
-    }
-    else if (userFlags.editor) {
-      request.action = 'deleteByQuery'
-      request.body = { query: {} }
 
-      request = this.fromEditor(request, { json: true })
+    if (userFlags['dry-run']) {
+      if (singleDelete) {
+        const exists = await this.sdk.document.exists(index, collection, args.id)
+
+        this.logOk(`${exists ? 1 : 0} document matching`)
+      }
+      else {
+        const count = await this.sdk.document.count(index, collection, query)
+
+        this.logOk(`${count} documents matching`)
+      }
     }
     else {
-      throw new Error('You must either provide an ID as an argument, the --query flag or the --editor flag')
-    }
+      if (singleDelete) {
+        await this.sdk.document.delete(index, collection, args.id)
 
-    const { result } = await this.sdk.query(request)
+        this.logOk('Successfully deleted 1 document')
+      }
+      else {
 
-    if (request.action === 'delete') {
-      this.logOk(`Successefully deleted ${args.id} document`)
-    }
-    else {
-      this.logOk(`Successefully deleted ${result.ids.length} documents`)
+        const options = {
+          size: userFlags['batch-size']
+        }
+
+        let result = await this.sdk.document.search(index, collection, query, options)
+
+        const progressBar = cli.progress({
+          format: `Deleting matching documents |{bar}| {percentage}% || {value}/{total} documents`
+        })
+        progressBar.start(result.total, 0)
+
+        let total;
+        while (result) {
+          const ids = result.hits.map((hit: any) => hit._id)
+
+          await this.sdk.document.mDelete(index, collection, ids)
+
+          progressBar.update(result.fetched)
+
+          total = result.total
+
+          result = await result.next()
+        }
+
+        progressBar.stop()
+
+        this.logOk(`Successfully deleted ${total} documents`)
+      }
     }
   }
+
 }

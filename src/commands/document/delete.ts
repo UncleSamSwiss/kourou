@@ -81,6 +81,7 @@ export default class DocumentGet extends Kommand {
       else {
 
         const options = {
+          scroll: '10s',
           size: userFlags['batch-size']
         }
 

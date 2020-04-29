@@ -58,32 +58,41 @@ export class ConfigKeyDiff extends Kommand {
 
   // Returns path who had changed between two objects (inspired by https://gist.github.com/Yimiprod/7ee176597fef230d1451)
   _keyChanges(base: any, object: any) {
-    const changes: any = {}
+    const changes: any = {};
 
-    function walkObject(base: any, object: any, path: any = []) {
+    function walkObject(base: any, object: any, path = '') {
       for (const key of Object.keys(base)) {
+        const currentPath = path === ''
+          ? key
+          : `${path}.${key}`;
+
         if (object[key] === undefined) {
-          const ar: [] = []
-          const ar2: [] = []
-          ar.concat(ar2)
-          changes[[...path, key].join('.')] = 'was removed'
+          changes[currentPath] = 'was removed';
         }
       }
 
       for (const [key, value] of Object.entries(object)) {
+        const currentPath = Array.isArray(object)
+          ? path + `[${key}]`
+          : path === ''
+            ? key
+            : `${path}.${key}`;
+
         if (base[key] === undefined) {
-          changes[[...path, key].join('.')] = 'was added'
+          changes[currentPath] = 'was added';
         }
-        else if (!_.isEqual(value, base[key]) && _.isObject(value) && _.isObject(base[key])) {
-          walkObject(base[key], value, [...path, key])
-        }
-        else if (base[key] !== object[key]) {
-          changes[[...path, key].join('.')] = `value is "${object[key]}" and was "${base[key]}"`
+        else if (value !== base[key]) {
+          if (typeof value === 'object' && typeof base[key] === 'object') {
+            walkObject(base[key], value, currentPath)
+          }
+          else {
+            changes[currentPath] = `value is "${object[key]}" and was "${base[key]}"`;
+          }
         }
       }
     }
 
-    walkObject(base, object)
+    walkObject(base, object);
 
     return changes
   }

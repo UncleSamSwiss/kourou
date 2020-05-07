@@ -1,3 +1,4 @@
+import * as _ from 'lodash'
 import { flags } from '@oclif/command'
 
 import { Kommand } from '../common'
@@ -28,9 +29,11 @@ Query body
 Other
 
   use the --editor flag to modify the query before sending it to Kuzzle
+  use the --print flag to print a specific property of the response
 
   Examples:
     - kourou query document:create -i iot -c sensors --editor
+    - kourou query document:create -i iot -c sensors --print result._id
 `;
 
   public static flags = {
@@ -54,6 +57,9 @@ Other
     collection: flags.string({
       char: 'c',
       description: 'Collection argument'
+    }),
+    print: flags.string({
+      description: 'Print a specific property of the response.'
     }),
     ...kuzzleFlags,
   };
@@ -99,7 +105,12 @@ Other
 
     const response = await this.sdk?.query(request)
 
-    this.log(JSON.stringify(response, null, 2))
+    if (this.flags.print) {
+      this.log(JSON.stringify(_.get(response, this.flags.print), null, 2))
+    }
+    else {
+      this.log(JSON.stringify(response, null, 2))
+    }
 
     this.logOk(`Successfully executed "${controller}:${action}"`)
   }
